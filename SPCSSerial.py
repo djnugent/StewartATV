@@ -10,31 +10,31 @@ Weird behavior
     - when offest is present -> decreasing P increases steady state error
 
 8 Byte Command Packet
-    1st Byte   '$'
-    2nd Byte   'C'
-    3rd Byte    Command Byte (0 - 255)
-    4th Byte    Lower Data Byte (0 - 255)
-    5th Byte   Upper Data Byte (0 - 255)
-    6th Byte   '#'
-    7th Byte   Lower CRC Byte (0 - 255)
-    8th Byte   Upper CRC Byte (0 -255)
+    1st Byte                '$'
+    2nd Byte                'C'
+    3rd Byte                Command Byte (0 - 255)
+    4th Byte                Lower Data Byte (0 - 255)
+    5th Byte                Upper Data Byte (0 - 255)
+    6th Byte                '#'
+    7th Byte                Lower CRC Byte (0 - 255)
+    8th Byte                Upper CRC Byte (0 -255)
 
 6 Byte Response Packet
     1st Byte                '+'
-    2nd Byte                DataLow (lower 8 bits)
-    3rd Byte                DataHigh (upper 8 bits)
+    2nd Byte                Lower Data (lower 8 bits)
+    3rd Byte                Upeer Data (upper 8 bits)
     4th Byte                '#'
-    5th Byte                CRCLow (lower 8 bits)
-    6th Byte                CRCHigh (upper 8 bits)
+    5th Byte                Lower CRC (lower 8 bits)
+    6th Byte                Upper CRC (upper 8 bits)
 
 
 Command List
-    88           Set Command (0 to 4095)
-    89           SET_COMMAND_SOURCE (0/1)
     1            Set Proportional (0 to 1000)
     2            Set Derivative (0 to 1000)
     8            Forced Damping(0 to 1000)
     15           Offset ( -1000 to 1000)
+    88           Set Command (0 to 4095)
+    89           SET_COMMAND_SOURCE (0/1)
     112          *undocumented - startup command
     113          *undocumented - startup command
     119          *undocumented - startup command
@@ -70,9 +70,9 @@ Command List
 
 class SPCS2_USB():
 
-    def __init__(self,port,baudrate = 115200):
+    def __init__(self,port):
         self.ser = serial.Serial(port = port,
-                                baudrate = baudrate,
+                                baudrate = 115200,
                                 timeout = 0.1)
         self.command_source = 1
         self.response_bytes_queued = 0
