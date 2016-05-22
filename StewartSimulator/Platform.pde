@@ -4,13 +4,15 @@ import Jama.Matrix;
 class Platform {
   private PVector translation, rotation, origin, attitude;
   private PVector[] base_joint, platform_joint, base, platform;
+  float[] l;
 
   private final float base_angles[] = {50, 70, 170, 190, 290, 310};
   private final float platform_angles[]  = {10, 110, 130, 230, 250, 350};
   private final float base_radius = 36;
   private final float platform_radius = 15;
   private final float initial_height = 15;
-  private final float cylinder_length = 13;
+  private final float rod_base = 30; //piston housing length
+  private final float rod_throw = 30; //max piston travel
   private final float scale = 1.0;
   
 
@@ -27,6 +29,7 @@ class Platform {
     platform_joint = new PVector[6];
     base = new PVector[6];
     platform = new PVector[6];
+    l = new float[6];
 
 
     //generate base
@@ -56,15 +59,13 @@ class Platform {
   private void transform(PVector t, PVector r) {
     rotation.set(r);
     translation.set(t);
-    
-    
+        
     //rotate around base
     base = rotate_mat_ZYX(attitude, base_joint);
     platform = rotate_mat_ZYX(attitude, platform_joint);
     
     //rotate platform(global) -- apply rotation here for global cooridnates
     platform = rotate_mat_ZYX(rotation, platform);
-    
     
     //extend platform to initial position(local frame)
     PVector[] initial_local = {new PVector(0.0,0.0,scale*initial_height)};
@@ -77,14 +78,15 @@ class Platform {
     
     //translate platform to final position
     platform = translate_mat(translation,platform);
+    
+    //calculate the length of the rods
+    for(int i = 0; i <6; i++){
+     l[i] = PVector.sub(platform[i], base[i]).mag() - rod_base;
+    }
   }
 
 
  public float[] get_length(){
-   float[] l = new float[6];
-   for(int i = 0; i <6; i++){
-     l[i] = PVector.sub(platform[i], base[i]).mag() - cylinder_length;
-    }
    return l;
  }
 
@@ -93,6 +95,7 @@ class Platform {
     
     // draw Base
     fill(56);
+    noStroke();
     beginShape();
     for (int i = 0; i < 6; i++) {
       vertex(base[i].x,base[i].y,base[i].z);
@@ -109,12 +112,33 @@ class Platform {
       vertex(platform[i].x,platform[i].y,platform[i].z);
     }
     endShape(CLOSE);
-  
+     
+     
+    //draw cylinders
+    PVector[] cylinder = new PVector[6];
+    for(int i = 0; i <6; i++){
+      cylinder[i] = PVector.sub(platform[i],base[i]);
+      cylinder[i].normalize();
+      cylinder[i].mult(rod_base);
+      cylinder[i].add(base[i]);
+      if(l[i] < 0){
+        stroke(150,0,0);
+      }
+      else if(l[i] > rod_throw){
+        stroke(0,0,150);
+      }
+      else{
+        stroke(0,150,0);
+      }
+      strokeWeight(3);
+      line(base[i].x, base[i].y, base[i].z, cylinder[i].x, cylinder[i].y, cylinder[i].z);
+    }
+    
     // draw rods
     for (int i=0; i<6; i++) {
        stroke(150);
        strokeWeight(1);
-       line(base[i].x, base[i].y, base[i].z, platform[i].x, platform[i].y, platform[i].z);
+       line(cylinder[i].x, cylinder[i].y, cylinder[i].z, platform[i].x, platform[i].y, platform[i].z);
      }
     
   }

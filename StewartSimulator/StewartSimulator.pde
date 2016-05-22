@@ -75,14 +75,21 @@ void draw() {
     PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
   platform2.transform(PVector.mult(new PVector(posX, posY, posZ), MAX_TRANSLATION), 
     PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
-  platform3.transform(PVector.mult(new PVector(posX, posY, posZ), MAX_TRANSLATION), 
+  platform3.transform(PVector.mult(new PVector(-posX, posY, posZ), MAX_TRANSLATION), 
     PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
-  platform4.transform(PVector.mult(new PVector(posX, posY, posZ), MAX_TRANSLATION), 
+  platform4.transform(PVector.mult(new PVector(-posX, posY, posZ), MAX_TRANSLATION), 
     PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
   platform1.draw();
   platform2.draw();
   platform3.draw();
   platform4.draw();
+  
+  float[] l = platform1.get_length();
+  for(int i = 0; i < 6; i++){
+    print(l[i]);
+    print(", ");
+  }
+  println();
 
   hint(DISABLE_DEPTH_TEST);
   camera.beginHUD();
@@ -104,7 +111,6 @@ void mouseDragged () {
     posX = map(mouseX, 0, width, -1, 1);
     posY = map(mouseY, 0, height, -1, 1);
   }
-  println(camera.getRotations());
 }
 
 
