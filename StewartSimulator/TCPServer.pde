@@ -1,32 +1,6 @@
 import java.io.*;
 import java.net.*;
 
-Server ser;
-
-void setup() {
-  int portNumber = 9876;
-  ser = new Server(portNumber);
-  ser.start();
-  f
-  
-  Callback client_connect = new Callback(){
-      public void execute(Object... args){
-        println("we have a new client");
-        Client c = ser.get_clients().get(0);
-        c.send("hello");
-      }
-  };
-  ser.set_onClientConnectCallback(client_connect);
-  
-  
-}
-
-void draw() {
-}
-
-
-
-
 
 class Server implements Runnable {
   private Thread t;
@@ -107,6 +81,7 @@ class Client implements Runnable {
   private Callback onDataReceivedCallback;
   private double last_heartbeat = 0;
   private boolean running = false;
+  public int id = -1;
 
   public Client(Socket clientSocket) {
     this.clientSocket = clientSocket;
@@ -123,7 +98,8 @@ class Client implements Runnable {
     while (running) {
       JSONObject obj = readJSON();
       if (obj.size() > 0) {
-        if (obj.getString("msg_id") == "heartbeat") {
+        if (obj.getString("msg_id").equals("heartbeat")) {
+          id = obj.getInt("id");
           last_heartbeat = System.currentTimeMillis()/1000.0;
         } else if (onDataReceivedCallback != null) {
           onDataReceivedCallback.execute(obj);
@@ -146,39 +122,37 @@ class Client implements Runnable {
   }
 
   public JSONObject readJSON() {
-    String jsonData = "";
-    String line;
+    String line = null;
     try {
-      while ( (line = in.readLine ()) != null) {
-        jsonData += line + "\n";
-      }
+        line = in.readLine();
     }
     catch(IOException e) {
       println("Error reading TCP packet");
     }
     JSONObject obj = new JSONObject();
-    if (jsonData.length() > 0) {
-      obj = parseJSONObject(jsonData);
+    if (line != null && line.length() > 0) {
+      obj = parseJSONObject(line);
     }
     return obj;
   }
 
-  public void send(String data) {
+  public void send(JSONObject json) {
+    String data = json.toString().replace("\n", "").replace("\r", "");
     out.println(data);
-    out.flush();
+    //out.flush();
   }
 
   public boolean connected() {
     return (System.currentTimeMillis()/1000.0 - last_heartbeat < 2);
   }
 
-  public void set_onDataRecievedCallback(Callback callback) {
+  public void set_onDataReceivedCallback(Callback callback) {
     onDataReceivedCallback = callback;
   }
 }
 
 
-public interface Callback {
+public interface Callback{
   public void execute(Object... args);
 }
 

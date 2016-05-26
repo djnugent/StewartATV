@@ -1,73 +1,52 @@
-import peasy.*;
+import peasy.*; //<>//
 import controlP5.*;
 import oscP5.*;
+import java.io.*;
 
-//GUI variables
+
+float MAX_TRANSLATION = 50;
+float MAX_ROTATION = PI/2;
+
 ControlP5 cp5;
 PeasyCam camera;
-int camera_angle;
-boolean ctlPressed = false;
-float posX=0, posY=0, posZ=0, rotX=0, rotY=0, rotZ=0;
+Platform platform1, platform2, platform3, platform4;
 
-//Platform variables
-ArrayList<Platform> platforms = new ArrayList<Platform>();
+
+float posX=0, posY=0, posZ=0, rotX=0, rotY=0, rotZ=0;
+boolean ctlPressed = false;
+
+int camera_angle = 0;
 
 float ATV_width = 100;
 float ATV_length = 100;
 float platform_angle = 2*PI/3;
 
-PVector whl_0_origin = new PVector(ATV_width/2,-ATV_length/2,0);
-PVector whl_1_origin = new PVector(ATV_width/2,ATV_length/2,0);
-PVector whl_2_origin = new PVector(-ATV_width/2,ATV_length/2,0);
-PVector whl_3_origin = new PVector(-ATV_width/2,-ATV_length/2,0);
-PVector whl_0_attitude = new PVector(PI,platform_angle - PI,0);
+PVector whl_1_origin = new PVector(ATV_width/2,-ATV_length/2,0);
+PVector whl_2_origin = new PVector(ATV_width/2,ATV_length/2,0);
+PVector whl_3_origin = new PVector(-ATV_width/2,ATV_length/2,0);
+PVector whl_4_origin = new PVector(-ATV_width/2,-ATV_length/2,0);
 PVector whl_1_attitude = new PVector(PI,platform_angle - PI,0);
-PVector whl_2_attitude = new PVector(0,-platform_angle,0);
+PVector whl_2_attitude = new PVector(PI,platform_angle - PI,0);
 PVector whl_3_attitude = new PVector(0,-platform_angle,0);
-
-
-//network Variables and callbacks
-Server server;
-int portNumber = 9876;
-Callback client_connect = new Callback(){
-      public void execute(Object... args){
-        Client client = (Client)args[0];
-        //wait for client to identify in a heartbeat packet
-        while(client.id == -1){
-          delay(2);
-        }
-        Platform platform = platforms.get(client.id);
-        platform.setClient(client);
-      }
-};
+PVector whl_4_attitude = new PVector(0,-platform_angle,0);
 
 void setup() {
-  //initialize window
   size(1024, 768, P3D);
   smooth();
-  textSize(20);
   frameRate(60);
+  textSize(20);
 
-  //initialize camera
   camera = new PeasyCam(this, 666);
   camera.setRotations(0.0, 0.0, 0.0);
   camera.lookAt(8.0, -50.0, 80.0);
-  camera_angle = 0;
- 
 
-  //create platforms
-  platforms.add(new Platform(whl_0_origin, whl_0_attitude));
-  platforms.add(new Platform(whl_1_origin, whl_1_attitude));
-  platforms.add(new Platform(whl_2_origin, whl_2_attitude));
-  platforms.add(new Platform(whl_3_origin, whl_3_attitude));
+  platform1 = new Platform(whl_1_origin, whl_1_attitude);
+  platform2 = new Platform(whl_2_origin, whl_2_attitude);
+  platform3 = new Platform(whl_3_origin, whl_3_attitude);
+  platform4 = new Platform(whl_4_origin, whl_4_attitude);
 
-  //start server
-  server = new Server(portNumber);
-  server.set_onClientConnectCallback(client_connect);
-  server.start();
-
-  //create sliders
   cp5 = new ControlP5(this);
+
   cp5.addSlider("posX")
     .setPosition(20, 20)
     .setSize(180, 40).setRange(-1, 1);
@@ -77,6 +56,7 @@ void setup() {
   cp5.addSlider("posZ")
     .setPosition(20, 120)
     .setSize(180, 40).setRange(-1, 1);
+
   cp5.addSlider("rotX")
     .setPosition(width-200, 20)
     .setSize(180, 40).setRange(-1, 1);
@@ -93,14 +73,25 @@ void setup() {
 
 void draw() {
   background(200);
-  for (Platform platform: platforms){
-    
-    platform.transform(PVector.mult(new PVector(posX, posY, posZ), 50), 
-      PVector.mult(new PVector(rotX, rotY, rotZ), PI/2));
-    platform.draw();
-    //platform.send_position();
+  platform1.transform(PVector.mult(new PVector(posX, posY, posZ), MAX_TRANSLATION), 
+    PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
+  platform2.transform(PVector.mult(new PVector(posX, posY, posZ), MAX_TRANSLATION), 
+    PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
+  platform3.transform(PVector.mult(new PVector(-posX, posY, posZ), MAX_TRANSLATION), 
+    PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
+  platform4.transform(PVector.mult(new PVector(-posX, posY, posZ), MAX_TRANSLATION), 
+    PVector.mult(new PVector(rotX, rotY, rotZ), MAX_ROTATION));
+  platform1.draw();
+  platform2.draw();
+  platform3.draw();
+  platform4.draw();
+  
+  float[] l = platform1.get_length();
+  for(int i = 0; i < 6; i++){
+    print(l[i]);
+    print(", ");
   }
-
+  println();
 
   hint(DISABLE_DEPTH_TEST);
   camera.beginHUD();
@@ -129,24 +120,24 @@ void keyPressed() {
   if (key == ' ') {
     
     switch(camera_angle){
-      case 0: //wheel 0
-        camera.setRotations(-PI, PI/2, PI/2);
-        camera.lookAt(whl_0_origin.x, whl_0_origin.y, whl_0_origin.z);
-        camera.setDistance(200);
-      break;
-      case 1: //wheel 1
+      case 0: //wheel 1
         camera.setRotations(-PI, PI/2, PI/2);
         camera.lookAt(whl_1_origin.x, whl_1_origin.y, whl_1_origin.z);
         camera.setDistance(200);
       break;
-      case 2: //wheel 2
-        camera.setRotations(PI, -PI/2, -PI/2);
+      case 1: //wheel 2
+        camera.setRotations(-PI, PI/2, PI/2);
         camera.lookAt(whl_2_origin.x, whl_2_origin.y, whl_2_origin.z);
         camera.setDistance(200);
       break;
-      case 3: //wheel 3
+      case 2: //wheel 3
         camera.setRotations(PI, -PI/2, -PI/2);
         camera.lookAt(whl_3_origin.x, whl_3_origin.y, whl_3_origin.z);
+        camera.setDistance(200);
+      break;
+      case 3: //wheel 4
+        camera.setRotations(PI, -PI/2, -PI/2);
+        camera.lookAt(whl_4_origin.x, whl_4_origin.y, whl_4_origin.z);
         camera.setDistance(200);
       break;
       case 4: //top
