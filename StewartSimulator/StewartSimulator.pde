@@ -1,6 +1,8 @@
 import peasy.*; //<>//
 import controlP5.*;
 import oscP5.*;
+import java.io.*;
+
 
 float MAX_TRANSLATION = 50;
 float MAX_ROTATION = PI/2;
@@ -17,7 +19,7 @@ int camera_angle = 0;
 
 float ATV_width = 100;
 float ATV_length = 100;
-float platform_angle = 7*PI/12;
+float platform_angle = 2*PI/3;
 
 PVector whl_1_origin = new PVector(ATV_width/2,-ATV_length/2,0);
 PVector whl_2_origin = new PVector(ATV_width/2,ATV_length/2,0);
@@ -163,3 +165,5 @@ void keyReleased() {
     ctlPressed = false;
   }
 }
+
+

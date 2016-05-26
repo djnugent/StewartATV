@@ -55,7 +55,7 @@ Command List
     146          *undocumented - startup command
     149          *undocumented - startup command
     148          *undocumented - startup command
-    147          *undocumented - startup command
+    147          Get Serial Number
     152          Get Analog Set Point (returns 0 to 4095)
     153          Get Feedback  (returns 0 to 4095)
     154          Get Pressure 1 (returns 0 to 4095)
@@ -78,6 +78,8 @@ class SPCS2_USB():
         self.response_bytes_queued = 0
 
     def close(self):
+        self.set_command_source(1)
+        time.sleep(0.25)
         self.ser.close()
 
     @classmethod
@@ -237,6 +239,19 @@ class SPCS2_USB():
             pressure[i] = self.unpack_response(raw)
         return pressure
 
+    def get_serial_number(self):
+        #clear input buffer of responses
+        self.ser.read(self.response_bytes_queued)
+        self.response_bytes_queued = 0
+
+        #request data
+        command = self.pack_command(147, 4369)
+        self.ser.write(command)
+
+        #read response
+        raw = self.ser.read(6)
+        serial_number = self.unpack_response(raw)
+        return serial_number
 
 if __name__ == "__main__":
     #connect to controller
@@ -312,8 +327,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("KeyboardInterrupt")
     finally:
-        controller.set_command_source(1)
-        print("Restored Analog control")
-        time.sleep(0.25)
         controller.close()
         print("Closed connection")

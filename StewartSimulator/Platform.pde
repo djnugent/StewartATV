@@ -6,13 +6,13 @@ class Platform {
   private PVector[] base_joint, platform_joint, base, platform;
   float[] l;
 
-  private final float base_angles[] = {50, 70, 170, 190, 290, 310};
-  private final float platform_angles[]  = {10, 110, 130, 230, 250, 350};
-  private final float base_radius = 36;
-  private final float platform_radius = 15;
-  private final float initial_height = 15;
-  private final float rod_base = 30; //piston housing length
-  private final float rod_throw = 30; //max piston travel
+  private final float base_angles[] = {53.82161, 66.17839, 173.82161, 186.17839, 293.82161, 306.17839};
+  private final float platform_angles[]  = {21.7867, 98.2133, 141.7867, 218.2133, 261.7867, 338.2133};
+  private final float base_radius = 13.937;
+  private final float platform_radius = 4.041;
+  private final float initial_height = 24;
+  private final float rod_base = 26; //piston housing length
+  private final float rod_throw = 18; //max piston travel
   private final float scale = 1.0;
   
 
@@ -26,7 +26,7 @@ class Platform {
     translation = new PVector();
     rotation = new PVector();
     base_joint = new PVector[6];
-    platform_joint = new PVector[6];
+    platform_joint = new PVector[7];
     base = new PVector[6];
     platform = new PVector[6];
     l = new float[6];
@@ -45,6 +45,8 @@ class Platform {
       float my = this.platform_radius*sin(radians(this.platform_angles[i]));
       platform_joint[i] = new PVector(mx, my, 0);
     }
+    platform_joint[6] = new PVector(0, 0, 7.5); 
+    
     
     //fill arrays
     for (int i=0; i<6; i++) {
@@ -88,6 +90,14 @@ class Platform {
 
  public float[] get_length(){
    return l;
+ }
+ 
+ public PVector[] get_base(){
+   return base;
+ }
+ 
+ public PVector[] get_platform(){
+   return platform;
  }
 
 
