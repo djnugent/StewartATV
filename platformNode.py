@@ -20,13 +20,14 @@ class platformNode():
 
     def connect_to_platform(self):
         #connect to controllers
-        for i in range(0,len(usb_map)):
-            device = "/dev/ttyUSB" + i
+        for i in range(0,len(self.usb_map)):
+            device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
             controller = SPCS2_USB(device)
+            time.sleep(0.1)
             controller.set_command_source(0)
             serial_number = controller.get_serial_number()
-            self.controllers[self.usb_map[serial_number]] = controller
+            self.controllers[self.usb_map[str(serial_number)]] = controller
 
     def connect_to_server(self, TCP_ip, TCP_port = 9876, timeout = 30):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -51,47 +52,53 @@ class platformNode():
         return True
 
     def receive_command(self):
-        self.inbuffer += self.sock.recv(1024)
-        newline = self.inbuffer.find('\n')
-        line = self.inbuffer[0:newline+1]
-        self.inbuffer = self.inbuffer[newline+1:0]
-        obj = json.loads(line)
-        print len(self.inbuffer)
+        self.inbuffer += self.sock.recv(4096)
 
-        msg_id = obj["msg_id"]
-        if msg_id == "request_feedback_stream":
-            self.stream_rate = obj["stream_rate"]
-            self.do_stream_position = obj["do_stream_position"]
-            self.do_stream_pressure = obj["do_stream_pressure"]
-        elif msg_id == "set_value":
-            value_type = obj["value_type"]
-            values = obj["values"]
-            print len(values)
-            for i in range(0,len(values)):
-                if self.controllers[i] is None:
-                    print "uninitialized controller"
-                    continue
-                value = int(values[i][str(i)])
-                if value_type == "position":
-                    self.controllers[i].set_position(value)
-                elif value_type == "proportional":
-                    self.controllers[i].set_proportional(value)
-                elif value_type == "derivative":
-                    self.controllers[i].set_derivative(value)
-                elif value_type == "offset":
-                    self.controllers[i].set_offset(value)
-                elif value_type == "force_damping":
-                    self.controllers[i].set_force_damping(value)
-                else:
-                    print "invalid value_type"
+        complete_lines = self.inbuffer.count('\n')
+        lines = self.inbuffer.split('\n')
+        if len(lines) > complete_lines:
+            self.inbuffer = lines[-1]
+            del lines[-1]
         else:
-            print "invalid command type"
+            self.inbuffer = ""
+
+        for line in lines:
+            obj = json.loads(line)
+            msg_id = obj["msg_id"]
+            if msg_id == "request_feedback_stream":
+                self.stream_rate = obj["stream_rate"]
+                self.do_stream_position = obj["do_stream_position"]
+                self.do_stream_pressure = obj["do_stream_pressure"]
+            elif msg_id == "set_value":
+                value_type = obj["value_type"]
+                values = obj["values"]
+                for i in range(0,len(values)):
+                    if self.controllers[i] is None:
+                        print "uninitialized controller"
+                        continue
+                    value = int(values[i][str(i)])
+                    if value_type == "position":
+                        self.controllers[i].set_position(value)
+                    elif value_type == "proportional":
+                        self.controllers[i].set_proportional(value)
+                    elif value_type == "derivative":
+                        self.controllers[i].set_derivative(value)
+                    elif value_type == "offset":
+                        self.controllers[i].set_offset(value)
+                    elif value_type == "force_damping":
+                        self.controllers[i].set_force_damping(value)
+                    else:
+                        print "invalid value_type"
+            else:
+                print "invalid command type"
 
     def stream_feedback(self):
         last_feedback_time = time.time()
         while self.running:
+            
             if time.time() - self.last_heartbeat_time > 1:
                 self.send_heartbeat()
+
 
             #send sensor feedback
             if self.stream_rate > 0:
@@ -110,9 +117,9 @@ class platformNode():
                         if ctrl is None:
                             continue
                         if self.do_stream_position:
-                            position += ctrl.get_position()
+                            position.append(ctrl.get_position())
                         if self.do_stream_pressure:
-                            pressure += ctrl.get_pressure()
+                            pressure.append(ctrl.get_pressure())
                     #pack data
                     stream = {}
                     stream["msg_id"] = "stream"
@@ -151,6 +158,9 @@ class platformNode():
 
 if __name__ == "__main__":
     node = platformNode()
-    #node.connect_to_platform()
-    node.connect_to_server("localhost")
-    node.run()
+    node.connect_to_platform()
+    node.connect_to_server("172.16.68.106")
+    try:
+        node.run()
+    finally:
+        node.close()

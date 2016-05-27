@@ -5,6 +5,10 @@ class Platform {
   private PVector translation, rotation, origin, attitude;
   private PVector[] base_joint, platform_joint, base, platform;
   float[] l;
+  public int[] scaled_positions;
+  public boolean over_extended = false;
+  public boolean over_retracted = false;
+
 
   private final float base_angles[] = {
     53.82161, 66.17839, 173.82161, 186.17839, 293.82161, 306.17839
@@ -20,6 +24,9 @@ class Platform {
   private final float scale = 1.0;
 
   private Client client;
+  private int stream_rate = 5;
+  private boolean do_stream_position = true;
+  private boolean do_stream_pressure = true;
 
   public Platform(PVector origin, PVector attitude) {
 
@@ -36,6 +43,8 @@ class Platform {
     base = new PVector[6];
     platform = new PVector[6];
     l = new float[6];
+    scaled_positions = new int[6];
+    
 
     //generate base
     for (int i=0; i<6; i++) {
@@ -88,24 +97,42 @@ class Platform {
     //translate platform to final position
     platform = translate_mat(translation, platform);
 
-    //calculate the length of the rods
+    //calculate the length of the rods and scaled digital value
+    over_extended = false;
+    over_retracted = false;
     for (int i = 0; i <6; i++) {
+      //rod length
       l[i] = PVector.sub(platform[i], base[i]).mag() - rod_base;
+      //scale it to digital value
+      scaled_positions[i] = int(map(l[i], 0, rod_throw ,0,4095));
+      //check model constraints
+      if(scaled_positions[i] > 4095){
+        over_extended = true;
+      }
+      if(scaled_positions[i] < 0){
+        over_retracted = true;
+      }
     }
   }
 
-
+  
   public void setClient(Client client) {
+    //redirect callback to interal method
     Callback data_received = new Callback(){public void execute(Object... args){callback(args);}};
     this.client = client;
+    //set callback
     this.client.set_onDataReceivedCallback(data_received);
-    
+    //request feedback
+    //request_feedback_stream(stream_rate,do_stream_position, do_stream_pressure);
+  }
+  
+  public void request_feedback_stream(int stream_rate, boolean do_stream_position, boolean do_stream_pressure){
     //request data stream
     JSONObject json = new JSONObject();
     json.setString("msg_id", "request_feedback_stream");
-    json.setInt("stream_rate", 50);
-    json.setBoolean("do_stream_position", true);
-    json.setBoolean("do_stream_pressure", true);
+    json.setInt("stream_rate", stream_rate);
+    json.setBoolean("do_stream_position", do_stream_position);
+    json.setBoolean("do_stream_pressure", do_stream_pressure);
     client.send(json);
   }
 
@@ -127,17 +154,19 @@ class Platform {
   }
   
   public void send_position(){
+    //package data
     JSONObject json = new JSONObject();
     json.setString("msg_id", "set_value");
     json.setString("value_type", "position");
     JSONArray values = new JSONArray();
     for(int i = 0; i < 6; i++){
       JSONObject value = new JSONObject();
-      value.setFloat(i+"",l[i]);
+      value.setInt(i+"",scaled_positions[i]);
       values.setJSONObject(i,value);
     }
     json.setJSONArray("values",values);
-    if(client != null){
+    //check for connection and valid data
+    if(client != null && !over_extended && !over_retracted){
       client.send(json);
     }
     
@@ -182,7 +211,7 @@ class Platform {
       }
       strokeWeight(3);
       line(base[i].x, base[i].y, base[i].z, cylinder[i].x, cylinder[i].y, cylinder[i].z);
-    }
+    } 
 
     // draw rods
     for (int i=0; i<6; i++) {

@@ -25,8 +25,12 @@ PVector whl_1_attitude = new PVector(PI,platform_angle - PI,0);
 PVector whl_2_attitude = new PVector(0,-platform_angle,0);
 PVector whl_3_attitude = new PVector(0,-platform_angle,0);
 
+int step;
+float speed = 100;
+float radius = .1;
 
-//network Variables and callbacks
+
+//network Variables and   callbacks
 Server server;
 int portNumber = 9876;
 Callback client_connect = new Callback(){
@@ -46,12 +50,13 @@ void setup() {
   size(1024, 768, P3D);
   smooth();
   textSize(20);
-  frameRate(60);
 
   //initialize camera
-  camera = new PeasyCam(this, 666);
+  camera = new PeasyCam(this, 200);
   camera.setRotations(0.0, 0.0, 0.0);
-  camera.lookAt(8.0, -50.0, 80.0);
+  camera.lookAt(0,0,0);
+  camera.setMinimumDistance(2);
+  camera.setMaximumDistance(500); 
   camera_angle = 0;
  
 
@@ -91,23 +96,41 @@ void setup() {
   camera.setActive(true);
 }
 
+
 void draw() {
   background(200);
+  /*
+  posX = 0.3;
+  posY = radius * cos(step * 1.0 / speed);
+  posZ = radius * sin(step * 1.0/ speed) + 0.2;
+  step++;
+  */
+  
+  
+  int i = 0;
   for (Platform platform: platforms){
-    
+    if(i < 2){
     platform.transform(PVector.mult(new PVector(posX, posY, posZ), 50), 
       PVector.mult(new PVector(rotX, rotY, rotZ), PI/2));
+    }
+    else{
+      platform.transform(PVector.mult(new PVector(-posX, posY, posZ), 50), 
+      PVector.mult(new PVector(rotX, -rotY, rotZ), PI/2));
+    }
     platform.draw();
-    //platform.send_position();
+    platform.send_position();
+    i++;
   }
-
+ //println(platforms.get(0).scaled_positions);
+  
+ 
 
   hint(DISABLE_DEPTH_TEST);
   camera.beginHUD();
   cp5.draw();
   camera.endHUD();
   hint(ENABLE_DEPTH_TEST);
-}
+ }
 
 void controlEvent(ControlEvent theEvent) {
   camera.setActive(false);
@@ -152,12 +175,12 @@ void keyPressed() {
       case 4: //top
         camera.setRotations(0.0, 0.0, 0.0);
         camera.lookAt(0, 0, 0);
-        camera.setDistance(400);
+        camera.setDistance(200);
       break;
       case 5: // front
         camera.setRotations(PI/2, 0, PI);
         camera.lookAt(0, 0, 0);
-        camera.setDistance(400);
+        camera.setDistance(200);
       break;
     }
     camera_angle = (camera_angle + 1) % 6;

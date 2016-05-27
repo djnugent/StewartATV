@@ -73,13 +73,12 @@ class SPCS2_USB():
     def __init__(self,port):
         self.ser = serial.Serial(port = port,
                                 baudrate = 115200,
-                                timeout = 0.1)
+                                timeout = 0.5)
         self.command_source = 1
         self.response_bytes_queued = 0
+        self.ser.flushInput()
 
     def close(self):
-        self.set_command_source(1)
-        time.sleep(0.25)
         self.ser.close()
 
     @classmethod
