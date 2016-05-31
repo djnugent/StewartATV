@@ -1,9 +1,12 @@
-###Stewart Platform Simulator
+###Stewart ATV Controller
 
-Math based on [this document](http://www.wokinghamu3a.org.uk/Maths%20of%20the%20Stewart%20Platform%20v5.pdf) by an unknown author from the [U3A Maths Group](http://www.wokinghamu3a.org.uk/Maths.html)  
+ Controls an ATV with 4 stewart platforms and 24 servopneumatics actuators
 
+ It is controlled using 4 raspberry pi clients and PC server.
 
-###Dependencie:  
+###Dependencies:  
 - [peasycam](http://mrfeinberg.com/peasycam/)  
 - [controlP5](http://www.sojamo.de/libraries/controlP5/)  
 - [oscP5](http://www.sojamo.de/libraries/oscP5/)
+- python2.7
+- pyserial

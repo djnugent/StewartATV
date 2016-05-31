@@ -24,9 +24,8 @@ class Platform {
   private final float scale = 1.0;
 
   private Client client;
+  private int stream_mode = 1;
   private int stream_rate = 5;
-  private boolean do_stream_position = true;
-  private boolean do_stream_pressure = true;
 
   public Platform(PVector origin, PVector attitude) {
 
@@ -123,16 +122,15 @@ class Platform {
     //set callback
     this.client.set_onDataReceivedCallback(data_received);
     //request feedback
-    //request_feedback_stream(stream_rate,do_stream_position, do_stream_pressure);
+    request_feedback_stream(stream_mode, stream_rate);
   }
   
-  public void request_feedback_stream(int stream_rate, boolean do_stream_position, boolean do_stream_pressure){
+  public void request_feedback_stream(int stream_mode,int stream_rate){
     //request data stream
     JSONObject json = new JSONObject();
     json.setString("msg_id", "request_feedback_stream");
+    json.setInt("stream_mode",stream_mode);
     json.setInt("stream_rate", stream_rate);
-    json.setBoolean("do_stream_position", do_stream_position);
-    json.setBoolean("do_stream_pressure", do_stream_pressure);
     client.send(json);
   }
 
