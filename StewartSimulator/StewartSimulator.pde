@@ -50,6 +50,7 @@ void setup() {
   size(1024, 768, P3D);
   smooth();
   textSize(20);
+  frameRate(60);
 
   //initialize camera
   camera = new PeasyCam(this, 200);
@@ -94,10 +95,15 @@ void setup() {
 
   cp5.setAutoDraw(false);
   camera.setActive(true);
+  
+  
+  
 }
 
-
+int last = 0;
 void draw() {
+  //println(1000.0/(millis() - last));
+  last = millis();
   background(200);
   /*
   posX = 0.3;
@@ -124,12 +130,13 @@ void draw() {
  //println(platforms.get(0).scaled_positions);
   
  
-
+  
   hint(DISABLE_DEPTH_TEST);
   camera.beginHUD();
   cp5.draw();
   camera.endHUD();
   hint(ENABLE_DEPTH_TEST);
+  
  }
 
 void controlEvent(ControlEvent theEvent) {
@@ -197,5 +204,4 @@ void keyReleased() {
     ctlPressed = false;
   }
 }
-
 

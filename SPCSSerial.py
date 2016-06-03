@@ -1,6 +1,8 @@
 
 import serial
 import time
+import Queue
+import threading
 
 '''
 TODO
@@ -64,6 +66,14 @@ Command List
     162          *undocumented - startup command
     163          *undocumented - startup command
     164          *undocumented - startup command
+
+
+
+Max stream rates(hz):
+set_pos = 300;
+set_pos = 100; pos+pres = 33
+set_pos = 100; pos = 100
+set_pos = 100; pres = 50
 '''
 
 
@@ -80,6 +90,8 @@ class SPCS2_USB():
         #controller state
         self.command_source = 1
         #controller feeback
+        self.outgoing = Queue.Queue()
+        self.incoming = Queue.Queue()
         self.serial_number = None
         self.position = None
         self.pressure = None
@@ -89,8 +101,9 @@ class SPCS2_USB():
         self.pressure_callback = None
         self.misc_callback = None
         #threads
-        self.read_thread = None
+        self.IO_thread = None
         self.request_thread = None
+        self.write_thread = None
         self.running = False
 
     def open(self,wait_serial_number = True, wait_feedback = False):
@@ -107,12 +120,15 @@ class SPCS2_USB():
 
         #start incoming data thread
         self.running = True
-        self.read_thread = threading.Thread(target=self.read_incoming)
-        self.read_thread.start()
+        self.IO_thread = threading.Thread(target=self.process_IO)
+        self.IO_thread.start()
 
         #start feedback thread
         self.request_thread = threading.Thread(target=self.request_feedback)
         self.request_thread.start()
+
+        #self.write_thread = threading.Thread(target=self.write)
+        #self.write_thread.start()
 
         #request serial_number
         self.request_serial_number()
@@ -134,13 +150,14 @@ class SPCS2_USB():
                 else:
                     time.sleep(.1)
 
-        print(self.port + " connected")
 
     def close(self):
         #stop threads
         self.running = False
-        self.feedback_thread.join()
-        self.read_thread.join()
+        self.request_thread.join()
+        #self.write_thread.join()
+        self.IO_thread.join()
+
         #clear I/O buffers
         self.ser.flushInput()
         self.ser.flushOutput()
@@ -224,9 +241,11 @@ class SPCS2_USB():
         if value < 0 or value > 4095:
             raise ValueError("{} is out of range(0-4095)".format(value))
 
-        self.outgoing.put("set_position")
+        #create command and queue it up
         command = self.pack_command(88,value)
-        self.ser.write(command)
+        self.outgoing.put(command)
+        self.incoming.put("set_position")
+
 
     # set_command_source - set the command source (0: PC, 1: Analog)
     def set_command_source(self,source):
@@ -234,10 +253,11 @@ class SPCS2_USB():
         if source < 0 or source > 1:
             raise ValueError("{} is out of range(0 or 1)".format(source))
 
-        self.outgoing.put("set_command_source")
+        #create command and queue it up
         command = self.pack_command(89,source)
+        self.outgoing.put(command)
+        self.incoming.put("set_command_source")
         self.command_source = source
-        self.ser.write(command)
 
     # set_proportional - set the proportional gain 0-100% (0 - 1000)
     def set_proportional(self,value):
@@ -245,9 +265,9 @@ class SPCS2_USB():
         if value < 0 or value > 1000:
             raise ValueError("{} is out of range(0-1000)".format(value))
 
-        self.outgoing.put("set_proportional")
+        #create command and queue it up
         command = self.pack_command(1,value)
-        self.ser.write(command)
+        self.outgoing.put(("set_proportional",command))
 
     # set_derivative - set the derivative gain 0-100% (0 - 1000)
     def set_derivative(self,value):
@@ -255,9 +275,9 @@ class SPCS2_USB():
         if value < 0 or value > 1000:
             raise ValueError("{} is out of range(0-1000)".format(value))
 
-        self.outgoing.put("set_derivative")
+        #create command and queue it up
         command = self.pack_command(2,value)
-        self.ser.write(command)
+        self.outgoing.put(("set_derivative",command))
 
     # set_force_damping - set the force damping constant (0 - 1000)
     def set_force_damping(self,value):
@@ -265,9 +285,9 @@ class SPCS2_USB():
         if value < 0 or value > 1000:
             raise ValueError("{} is out of range(0-1000)".format(value))
 
-        self.outgoing.put("set_force_damping")
+        #create command and queue it up
         command = self.pack_command(8,value)
-        self.ser.write(command)
+        self.outgoing.put(("set_force_damping",command))
 
     # set_offset- set the position offset (-1000 - 1000)
     def set_offset(self,value):
@@ -275,83 +295,101 @@ class SPCS2_USB():
         if value < -1000 or value > 1000:
             raise ValueError("{} is out of range(-1000 - 1000)".format(value))
 
-        self.outgoing.put("set_offset")
+        #create command and queue it up
         command = self.pack_command(15,value)
-        self.ser.write(command)
+        self.outgoing.put(("set_offset",command))
 
     # request_position- get the position feedback of controller (returns 0 - 4095)
     def request_position(self):
-        #queue request for proper response handling
-        self.outgoing.put("position_req")
-
-        #request data
-        command = self.pack_command(153, 4369)
-        self.ser.write(command)
+        #create request and queue it up
+        command = self.pack_command(153,4369)
+        self.outgoing.put(command)
+        self.incoming.put("position_req")
 
 
     # request_pressure - get the pressure feedback of controller (returns array[2] 0 - 4095)
     def request_pressure(self):
-        #queue request for proper response handling
-        self.outgoing.put("pressure1_req")
-        self.outgoing.put("pressure2_req")
+        #create request and queue it up
+        command = self.pack_command(154,4369)
+        self.outgoing.put(command)
+        self.incoming.put("pressure1_req")
+        #create request and queue it up
+        command = self.pack_command(155,4369)
+        self.outgoing.put(command)
+        self.incoming.put("pressure1_req")
 
-        #request data
-        command = self.pack_command(154,4369) #pres 1
-        self.ser.write(command)
-        command = self.pack_command(155 ,4369) #pres2
-        self.ser.write(command)
 
     # request_serial_number - get controller serial number
     def request_serial_number(self):
-        #queue request for proper response handling
-        self.outgoing.put("serial_number_req")
+        #create request and queue it up
+        command = self.pack_command(147,4369)
+        self.outgoing.put(command)
+        self.incoming.put("serial_number_req")
 
-        #request data
-        command = self.pack_command(147, 4369)
-        self.ser.write(command)
 
-    # read_incoming - handle incoming serial data
-    def read_incoming(self):
+
+    def process_IO(self):
         temp_pressure1 = None
+        last_write = 0
+        write_period = 1/500.0
         while self.running:
+
+            if self.outgoing.qsize() > 20:
+                print "WARNING: WRITING too fast, queued packets = {} ".format(self.outgoing.qsize())
+                time.sleep(0.1)
+            elif self.incoming.qsize() > 20:
+                print "WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.incoming.qsize(),self.ser.inWaiting())
+                time.sleep(0.1)
+            try:
+                #send next available outgoing message
+                if time.time() - last_write > write_period:
+                    packet = self.outgoing.get(block = False)
+                    self.ser.write(packet)
+                    last_write = time.time()
+                    #print self.outgoing.qsize()
+            except Queue.Empty:
+                pass
+
+            #check for a response
             if self.ser.inWaiting() > 5:
+                #process response
                 raw = self.ser.read(6)
                 data = self.unpack_response(raw)
-                sent = self.outgoing.get()
+                typ = self.incoming.get()
+                #print self.incoming.qsize()
+
                 #serial number response
-                if sent == "serial_number_req":
+                if typ == "serial_number_req":
                     self.serial_number = data
                     if self.serial_number_callback is not None:
                         self.serial_number_callback(data)
                 #pressure1 response
-                elif sent == "pressure1_req":
+                elif typ == "pressure1_req":
                     #pressure1 should always be requested before pressure2
                     temp_pressure1 = data
                 #pressure2 response
-                elif sent == "pressure2_req":
+                elif typ == "pressure2_req":
                     self.pressure = [temp_pressure1, data]
                     if self.pressure_callback is not None:
                         self.pressure_callback([temp_pressure1,data])
                 #position response
-                elif sent == "position_req":
+                elif typ == "position_req":
                     self.position = data
                     if self.position_callback is not None:
                         self.position_callback(data)
-
-                #set command_source response
-                elif sent == "set_command_source":
-                    self.command_source = data
 
                 #handle all other responses
                 else:
                     if self.misc_callback is not None:
                         self.misc_callback(data)
 
+
+
     # request_feedback - continuously request a feedback stream
     def request_feedback(self):
         last_feedback_time = 0
         while self.running:
-            if feedback_rate > 0:
+            if self.feedback_rate > 0:
                 period = 1.0/self.feedback_rate
 
                 if time.time() - last_feedback_time > period:
@@ -374,15 +412,12 @@ class SPCS2_USB():
 
 
 
-
-
-
-
 if __name__ == "__main__":
     #connect to controller
     port = raw_input(">>Please enter device port: ")
     controller = SPCS2_USB(port)
-    print("Connected on {}".format(port))
+    controller.open()
+    print("Connected to {} on {}".format(controller.serial_number,port))
 
     try:
         print("Available Programs:")
@@ -393,29 +428,34 @@ if __name__ == "__main__":
 
         #set position
         if program == 1:
+            print "here"
             controller.set_command_source(0)
+            controller.config_feedback(1,33)
             print("Enabled USB control")
             while True:
                 value = int(raw_input(">>Please enter a piston position(0-4095): "))
                 controller.set_position(value)
                 time.sleep(0.25) #wait for piston to move
-                position = controller.get_position()
-                pressure = controller.get_pressure()
+                position = controller.position
+                pressure = [None,None]#controller.pressure
                 print("Position: {}, Pressure1: {}, Pressure2: {}".format(position,pressure[0],pressure[1]))
 
         #Sweep
         elif program == 2:
+            rate = 60
             controller.set_command_source(0)
+            controller.config_feedback(0,50)
             print("Enabled USB control")
             speed = int(raw_input(">>Please enter a sweep speed: steps per 10 ms (10-600): "))
             while True:
                 for i in range(200,3500,speed):
                     controller.set_position(i)
-                    time.sleep(0.01)
-
+                    time.sleep(1.0/rate)
+                print "top"
                 for i in range(3500,200, -speed):
                     controller.set_position(i)
-                    time.sleep(0.01)
+                    time.sleep(1.0/rate)
+                print "bottom"
         #set parameters
         elif program == 3:
             print("Available parameters:")

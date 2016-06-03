@@ -85,12 +85,17 @@ class Client implements Runnable {
 
   public Client(Socket clientSocket) {
     this.clientSocket = clientSocket;
+
     try {
+      this.clientSocket.setTcpNoDelay(true);
       out = new PrintWriter(clientSocket.getOutputStream(), true);
       in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
     }
     catch(IOException e) {
       println("Unable to connect to client socket");
+    }
+    catch(SocketException e){
+      println("can't set socket no delay");
     }
   }
 

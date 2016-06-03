@@ -1,7 +1,7 @@
 import socket
 import time
 import json
-import thread
+import threading
 from SPCSSerial import SPCS2_USB
 
 class platformNode():
@@ -13,6 +13,7 @@ class platformNode():
         self.stream_rate = 0
         self.stream_mode = 0
         self.inbuffer = ''
+        self.last_packet = 0
 
         #read config File
         self.config = json.load(open("platform.config"))
@@ -39,7 +40,11 @@ class platformNode():
         #enable controllers and order them based on serial number
         for ctrl in unordered_controllers:
             ctrl.set_command_source(0)
-            self.controllers[self.usb_map[str(ctrl.serial_number)]] = ctrl
+            serial_number = ctrl.serial_number
+            if serial_number is None:
+                print ctrl.port + " Failed to connect"
+            else:
+                self.controllers[self.usb_map[str(ctrl.serial_number)]] = ctrl
 
     def connect_to_server(self, TCP_ip, TCP_port = 9876, timeout = 30):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -82,11 +87,14 @@ class platformNode():
                 self.stream_mode = obj["stream_mode"]
                 self.stream_rate = obj["stream_rate"]
                 for ctrl in self.controllers:
-                    ctrl.config_feedback(self.stream_mode,self.stream_rate)
+                    if ctrl is not None:
+                        ctrl.config_feedback(self.stream_mode,self.stream_rate)
 
             elif msg_id == "set_value":
                 value_type = obj["value_type"]
                 values = obj["values"]
+                print 1.0/(time.time()-self.last_packet)
+                self.last_packet = time.time()
                 for i in range(0,len(values)):
                     if self.controllers[i] is None:
                         print "uninitialized controller"
@@ -116,7 +124,7 @@ class platformNode():
                 self.send_heartbeat()
 
             #send sensor feedback
-            if self.stream_rate > 0:
+            if self.stream_rate > 0 and self.stream_mode != 0:
                 stream_period =  1.0/self.stream_rate
                 time_diff = time.time() - last_feedback_time
                 if time_diff > stream_period:
@@ -175,5 +183,6 @@ class platformNode():
 if __name__ == "__main__":
     node = platformNode()
     node.connect_to_platform()
-    node.connect_to_server("172.16.68.106")
-    node.run()
+    connected = node.connect_to_server("172.16.68.106")
+    if connected:
+        node.run()
