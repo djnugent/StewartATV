@@ -1,8 +1,8 @@
 
 import serial
 import time
-import Queue
-import threading
+from Queue import Empty
+from multiprocessing import Queue, Process, Value, Array, Lock
 
 '''
 TODO
@@ -80,33 +80,40 @@ set_pos = 100; pres = 50
 
 class SPCS2_USB():
 
-    def __init__(self,port, feedback_mode = 0):
+    def __init__(self,port):
         #serial config
         self.ser = None
         self.port = port
-        #feedback config
-        self.feedback_rate = 50
-        self.feedback_mode = feedback_mode #0:no feedback 1: pos + pres, 2: just pos, 3: just pres
         #controller state
         self.command_source = 1
         #controller feeback
-        self.outgoing = Queue.Queue()
-        self.incoming = Queue.Queue()
-        self.serial_number = None
-        self.position = None
-        self.pressure = None
+        self.outgoing = Queue()
+        self.incoming = Queue()
+        self._serial_number = Value('i',-1)
+        self._position = Value('i',-1)
+        self._pressure = Array('i',2)
+        self._pressure[0] = -1
         #callbacks
         self.serial_number_callback = None
         self.position_callback = None
         self.pressure_callback = None
         self.misc_callback = None
-        #threads
-        self.IO_thread = None
-        self.request_thread = None
-        self.write_thread = None
+        #processes
+        self.IO_process = None
         self.running = False
+        self.lock = Lock()
 
-    def open(self,wait_serial_number = True, wait_feedback = False):
+    @property
+    def serial_number(self):
+        return self._serial_number.value
+    @property
+    def position(self):
+        return self._position.value
+    @property
+    def pressure(self):
+        return [self._pressure[0],self._pressure[1]]
+
+    def open(self,wait_serial_number = True):
         #connect to serial port
         self.ser = serial.Serial(port = self.port,
                                 baudrate = 115200,
@@ -115,61 +122,35 @@ class SPCS2_USB():
         self.ser.flushInput()
         self.ser.flushOutput()
         #TODO reallign data
-
         time.sleep(0.3)
 
-        #start incoming data thread
+        #start incoming data process
         self.running = True
-        self.IO_thread = threading.Thread(target=self.process_IO)
-        self.IO_thread.start()
-
-        #start feedback thread
-        self.request_thread = threading.Thread(target=self.request_feedback)
-        self.request_thread.start()
-
-        #self.write_thread = threading.Thread(target=self.write)
-        #self.write_thread.start()
+        self.IO_process = Process(target=self.process_IO)
+        self.IO_process.daemon = True
+        self.IO_process.start()
 
         #request serial_number
         self.request_serial_number()
-        WAIT_TIMEOUT = 5
+        WAIT_TIMEOUT = 2
         if wait_serial_number:
             start = time.time()
-            while self.serial_number is None and (time.time()-start) < WAIT_TIMEOUT:
+            while self._serial_number.value == -1 and (time.time()-start) < WAIT_TIMEOUT:
                 time.sleep(0.1)
 
-        #wait for feedback fields to populate
-        if wait_feedback and self.feedback_mode != 0 and self.feedback_rate > 0:
-            while (time.time()-start) < WAIT_TIMEOUT:
-                if self.feedback_mode == 1 and self.position is not None and self.pressure is not None:
-                    break
-                elif self.feedback_mode == 2 and self.position is not None:
-                    break
-                elif self.feedback_mode == 3 and self.pressure is not None:
-                    break
-                else:
-                    time.sleep(.1)
-
-
     def close(self):
-        #stop threads
         self.running = False
-        self.request_thread.join()
-        #self.write_thread.join()
-        self.IO_thread.join()
+        try:
+            #stop process
+            self.IO_process.join()
+            #clear I/O buffers
+            self.ser.flushInput()
+            self.ser.flushOutput()
+            #close serial port
+            self.ser.close()
+        except AttributeError:
+            pass
 
-        #clear I/O buffers
-        self.ser.flushInput()
-        self.ser.flushOutput()
-        #close serial port
-        self.ser.close()
-
-    def config_feedback(self, feedback_mode, feedback_rate):
-        if feedback_rate > 0:
-            self.feedback_mode = feedback_mode
-            self.feedback_rate = feedback_rate
-        else:
-            self.feedback_mode = 0
 
     @classmethod
     # pack_command - packages a command
@@ -326,14 +307,11 @@ class SPCS2_USB():
         self.outgoing.put(command)
         self.incoming.put("serial_number_req")
 
-
-
     def process_IO(self):
         temp_pressure1 = None
         last_write = 0
         write_period = 1/500.0
         while self.running:
-
             if self.outgoing.qsize() > 20:
                 print "WARNING: WRITING too fast, queued packets = {} ".format(self.outgoing.qsize())
                 time.sleep(0.1)
@@ -347,7 +325,7 @@ class SPCS2_USB():
                     self.ser.write(packet)
                     last_write = time.time()
                     #print self.outgoing.qsize()
-            except Queue.Empty:
+            except Empty:
                 pass
 
             #check for a response
@@ -360,7 +338,8 @@ class SPCS2_USB():
 
                 #serial number response
                 if typ == "serial_number_req":
-                    self.serial_number = data
+                    #with self._serial_number.get_lock():
+                    self._serial_number.value = data
                     if self.serial_number_callback is not None:
                         self.serial_number_callback(data)
                 #pressure1 response
@@ -369,12 +348,15 @@ class SPCS2_USB():
                     temp_pressure1 = data
                 #pressure2 response
                 elif typ == "pressure2_req":
-                    self.pressure = [temp_pressure1, data]
+                    #with self._pressure.get_lock():
+                    self._pressure[0] = temp_pressure1
+                    self._pressure[1] = data
                     if self.pressure_callback is not None:
                         self.pressure_callback([temp_pressure1,data])
                 #position response
                 elif typ == "position_req":
-                    self.position = data
+                    #with self._position.get_lock():
+                    self._position.value = data
                     if self.position_callback is not None:
                         self.position_callback(data)
 
@@ -382,33 +364,8 @@ class SPCS2_USB():
                 else:
                     if self.misc_callback is not None:
                         self.misc_callback(data)
-
-
-
-    # request_feedback - continuously request a feedback stream
-    def request_feedback(self):
-        last_feedback_time = 0
-        while self.running:
-            if self.feedback_rate > 0:
-                period = 1.0/self.feedback_rate
-
-                if time.time() - last_feedback_time > period:
-                    last_feedback_time = time.time()
-
-                    #1 - stream position and pressure
-                    if self.feedback_mode == 1:
-                        self.request_position()
-                        self.request_pressure()
-                    #2 - stream position
-                    elif self.feedback_mode == 2:
-                        self.request_position()
-                    #3 - stream pressure
-                    elif self.feedback_mode == 3:
-                        self.request_pressure()
-                else:
-                    time.sleep(period/4.0)
             else:
-                time.sleep(0.25)
+                time.sleep(0.005)
 
 
 
@@ -430,7 +387,6 @@ if __name__ == "__main__":
         if program == 1:
             print "here"
             controller.set_command_source(0)
-            controller.config_feedback(1,33)
             print("Enabled USB control")
             while True:
                 value = int(raw_input(">>Please enter a piston position(0-4095): "))
@@ -444,7 +400,6 @@ if __name__ == "__main__":
         elif program == 2:
             rate = 60
             controller.set_command_source(0)
-            controller.config_feedback(0,50)
             print("Enabled USB control")
             speed = int(raw_input(">>Please enter a sweep speed: steps per 10 ms (10-600): "))
             while True:

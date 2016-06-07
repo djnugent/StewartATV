@@ -1,7 +1,7 @@
 import socket
 import time
 import json
-import threading
+from multiprocessing import Value, Process
 from SPCSSerial import SPCS2_USB
 
 class platformNode():
@@ -10,10 +10,12 @@ class platformNode():
         self.sock = None
         self.controllers = [None,None,None,None,None,None]
         self.running = True
-        self.stream_rate = 0
-        self.stream_mode = 0
+        self.stream_rate = Value('i',0)
+        self.stream_mode = Value('i',0)
         self.inbuffer = ''
         self.last_packet = 0
+        self.sum = 0.0
+        self.count = 0.0
 
         #read config File
         self.config = json.load(open("platform.config"))
@@ -22,29 +24,20 @@ class platformNode():
 
     def connect_to_platform(self):
         #connect to all controllers simultaneously
-        connect_threads = []
+        connect_processes = []
         unordered_controllers = []
         for i in range(0,len(self.usb_map)):
             device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
-            controller = SPCS2_USB(device)
-            unordered_controllers.append(controller)
-            c_thread = threading.Thread(target=controller.open)
-            c_thread.start()
-            connect_threads.append(c_thread)
-
-        #wait for connections to complete
-        for thr in connect_threads:
-            thr.join()
-
-        #enable controllers and order them based on serial number
-        for ctrl in unordered_controllers:
+            ctrl = SPCS2_USB(device)
+            ctrl.open() #blocking
             ctrl.set_command_source(0)
             serial_number = ctrl.serial_number
-            if serial_number is None:
+            if serial_number == -1:
                 print ctrl.port + " Failed to connect"
+                ctrl.close()
             else:
-                self.controllers[self.usb_map[str(ctrl.serial_number)]] = ctrl
+                self.controllers[self.usb_map[str(serial_number)]] = ctrl
 
     def connect_to_server(self, TCP_ip, TCP_port = 9876, timeout = 30):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -82,20 +75,24 @@ class platformNode():
         for line in lines:
             obj = json.loads(line)
             msg_id = obj["msg_id"]
+            rate = 1.0/(time.time()-self.last_packet)
+            self.last_packet = time.time()
+            self.sum += rate
+            self.count += 1
+            if self.count == 10:
+                print "{}: {} hz".format(msg_id,self.sum/self.count)
+                self.sum = 0.0
+                self.count = 0.0
 
             if msg_id == "request_feedback_stream":
-                self.stream_mode = obj["stream_mode"]
-                self.stream_rate = obj["stream_rate"]
-                for ctrl in self.controllers:
-                    if ctrl is not None:
-                        ctrl.config_feedback(self.stream_mode,self.stream_rate)
+                self.stream_mode.value = obj["stream_mode"]
+                self.stream_rate.value = obj["stream_rate"]
 
             elif msg_id == "set_value":
                 value_type = obj["value_type"]
                 values = obj["values"]
-                print 1.0/(time.time()-self.last_packet)
-                self.last_packet = time.time()
                 for i in range(0,len(values)):
+                    #continue
                     if self.controllers[i] is None:
                         print "uninitialized controller"
                         continue
@@ -115,17 +112,18 @@ class platformNode():
             else:
                 print "invalid command type"
 
+
     def stream_feedback(self):
         last_feedback_time = time.time()
         while self.running:
-
             #send heartbeat
             if time.time() - self.last_heartbeat_time > 1:
                 self.send_heartbeat()
 
             #send sensor feedback
-            if self.stream_rate > 0 and self.stream_mode != 0:
-                stream_period =  1.0/self.stream_rate
+            if self.stream_rate.value > 0 and self.stream_mode.value != 0:
+                print " we are streaming"
+                stream_period =  1.0/self.stream_rate.value
                 time_diff = time.time() - last_feedback_time
                 if time_diff > stream_period:
                     #update timestamp
@@ -136,12 +134,25 @@ class platformNode():
                     for ctrl in self.controllers:
                         if ctrl is None:
                             continue
-                        if self.stream_mode == 1:
+                        if self.stream_mode.value == 1:
+                            #request data
+                            ctrl.request_position()
+                            ctrl.request_pressure()
+                            time.sleep(stream_period/2.0)
+                            #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                             pressure.append(ctrl.pressure)
-                        if self.stream_mode == 2:
+                        if self.stream_mode.value == 2:
+                            #request data
+                            ctrl.request_position()
+                            time.sleep(stream_period/2.0)
+                            #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
-                        if self.stream_mode == 3:
+                        if self.stream_mode.value == 3:
+                            #request data
+                            ctrl.request_pressure()
+                            time.sleep(stream_period/2.0)
+                            #grab data - wont always arrive in time so it may be old
                             pressure.append(ctrl.pressure)
                     #pack data
                     stream = {}
@@ -152,6 +163,10 @@ class platformNode():
 
                     #send data
                     self.sock.send(packet)
+                else:
+                    time.sleep(stream_period/4.0)
+            else:
+                time.sleep(0.25)
 
     def send_heartbeat(self):
         packet = json.dumps({"msg_id":"heartbeat","id":self.id,"timestamp":time.time()}) + '\n'
@@ -162,16 +177,21 @@ class platformNode():
     def run(self):
         try:
             #start streaming feedback in the background
-            stream_thread = threading.Thread(target=self.stream_feedback)
-            stream_thread.start()
+            stream_process =  Process(target=self.stream_feedback)
+            #stream_process.daemon = True
+            stream_process.start()
             #process incoming commands
             while self.running:
                 self.receive_command()
+                time.sleep(0.005)
         finally:
             self.close()
 
     def close(self):
+        #stop process
         self.running = False
+        self.stream_process.join()
+
         #close server
         self.sock.close()
         #close controllers
@@ -184,5 +204,6 @@ if __name__ == "__main__":
     node = platformNode()
     node.connect_to_platform()
     connected = node.connect_to_server("172.16.68.106")
+    #connected = node.connect_to_server("192.168.1.14")
     if connected:
         node.run()

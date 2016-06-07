@@ -94,9 +94,7 @@ class Client implements Runnable {
     catch(IOException e) {
       println("Unable to connect to client socket");
     }
-    catch(SocketException e){
-      println("can't set socket no delay");
-    }
+   
   }
 
   public void run() {
@@ -144,7 +142,7 @@ class Client implements Runnable {
   public void send(JSONObject json) {
     String data = json.toString().replace("\n", "").replace("\r", "");
     out.println(data);
-    //out.flush();
+    out.flush();
   }
 
   public boolean connected() {
