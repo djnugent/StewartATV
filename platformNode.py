@@ -1,7 +1,7 @@
 import socket
 import time
 import json
-from multiprocessing import Value, Process
+from threading import Thread
 from SPCSSerial import SPCS2_USB
 
 class platformNode():
@@ -10,8 +10,8 @@ class platformNode():
         self.sock = None
         self.controllers = [None,None,None,None,None,None]
         self.running = True
-        self.stream_rate = Value('i',0)
-        self.stream_mode = Value('i',0)
+        self.stream_rate = 0
+        self.stream_mode = 0
         self.inbuffer = ''
         self.last_packet = 0
         self.sum = 0.0
@@ -85,14 +85,14 @@ class platformNode():
                 self.count = 0.0
 
             if msg_id == "request_feedback_stream":
-                self.stream_mode.value = obj["stream_mode"]
-                self.stream_rate.value = obj["stream_rate"]
+                self.stream_mode = obj["stream_mode"]
+                self.stream_rate = obj["stream_rate"]
 
             elif msg_id == "set_value":
                 value_type = obj["value_type"]
                 values = obj["values"]
                 for i in range(0,len(values)):
-                    #continue
+                    #break
                     if self.controllers[i] is None:
                         print "uninitialized controller"
                         continue
@@ -121,9 +121,9 @@ class platformNode():
                 self.send_heartbeat()
 
             #send sensor feedback
-            if self.stream_rate.value > 0 and self.stream_mode.value != 0:
+            if self.stream_rate > 0 and self.stream_mode != 0:
                 print " we are streaming"
-                stream_period =  1.0/self.stream_rate.value
+                stream_period =  1.0/self.stream_rate
                 time_diff = time.time() - last_feedback_time
                 if time_diff > stream_period:
                     #update timestamp
@@ -134,7 +134,7 @@ class platformNode():
                     for ctrl in self.controllers:
                         if ctrl is None:
                             continue
-                        if self.stream_mode.value == 1:
+                        if self.stream_mode == 1:
                             #request data
                             ctrl.request_position()
                             ctrl.request_pressure()
@@ -142,13 +142,13 @@ class platformNode():
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                             pressure.append(ctrl.pressure)
-                        if self.stream_mode.value == 2:
+                        if self.stream_mode == 2:
                             #request data
                             ctrl.request_position()
                             time.sleep(stream_period/2.0)
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
-                        if self.stream_mode.value == 3:
+                        if self.stream_mode == 3:
                             #request data
                             ctrl.request_pressure()
                             time.sleep(stream_period/2.0)
@@ -177,7 +177,7 @@ class platformNode():
     def run(self):
         try:
             #start streaming feedback in the background
-            stream_process =  Process(target=self.stream_feedback)
+            stream_process =  Thread(target=self.stream_feedback)
             #stream_process.daemon = True
             stream_process.start()
             #process incoming commands

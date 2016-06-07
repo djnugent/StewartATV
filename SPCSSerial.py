@@ -1,8 +1,8 @@
 
 import serial
 import time
-from Queue import Empty
-from multiprocessing import Queue, Process, Value, Array, Lock
+from Queue import Empty, Queue
+from threading import Thread
 
 '''
 TODO
@@ -89,10 +89,9 @@ class SPCS2_USB():
         #controller feeback
         self.outgoing = Queue()
         self.incoming = Queue()
-        self._serial_number = Value('i',-1)
-        self._position = Value('i',-1)
-        self._pressure = Array('i',2)
-        self._pressure[0] = -1
+        self._serial_number = -1
+        self._position = -1
+        self._pressure = [-1,-1]
         #callbacks
         self.serial_number_callback = None
         self.position_callback = None
@@ -101,17 +100,16 @@ class SPCS2_USB():
         #processes
         self.IO_process = None
         self.running = False
-        self.lock = Lock()
 
     @property
     def serial_number(self):
-        return self._serial_number.value
+        return self._serial_number
     @property
     def position(self):
-        return self._position.value
+        return self._position
     @property
     def pressure(self):
-        return [self._pressure[0],self._pressure[1]]
+        return self._pressure
 
     def open(self,wait_serial_number = True):
         #connect to serial port
@@ -126,8 +124,8 @@ class SPCS2_USB():
 
         #start incoming data process
         self.running = True
-        self.IO_process = Process(target=self.process_IO)
-        self.IO_process.daemon = True
+        self.IO_process = Thread(target=self.process_IO)
+        #self.IO_process.daemon = True
         self.IO_process.start()
 
         #request serial_number
@@ -135,7 +133,7 @@ class SPCS2_USB():
         WAIT_TIMEOUT = 2
         if wait_serial_number:
             start = time.time()
-            while self._serial_number.value == -1 and (time.time()-start) < WAIT_TIMEOUT:
+            while self._serial_number == -1 and (time.time()-start) < WAIT_TIMEOUT:
                 time.sleep(0.1)
 
     def close(self):
@@ -339,7 +337,7 @@ class SPCS2_USB():
                 #serial number response
                 if typ == "serial_number_req":
                     #with self._serial_number.get_lock():
-                    self._serial_number.value = data
+                    self._serial_number = data
                     if self.serial_number_callback is not None:
                         self.serial_number_callback(data)
                 #pressure1 response
@@ -356,7 +354,7 @@ class SPCS2_USB():
                 #position response
                 elif typ == "position_req":
                     #with self._position.get_lock():
-                    self._position.value = data
+                    self._position = data
                     if self.position_callback is not None:
                         self.position_callback(data)
 
