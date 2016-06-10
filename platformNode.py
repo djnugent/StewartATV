@@ -1,7 +1,9 @@
 import socket
 import time
 import json
+import platform
 from multiprocessing import Value, Process
+from threading import Thread
 from SPCSSerial import SPCS2_USB
 
 class platformNode():
@@ -16,6 +18,10 @@ class platformNode():
         self.last_packet = 0
         self.sum = 0.0
         self.count = 0.0
+        self.COM_ports = ["COM5","COM8","COM9","COM10","COM11","COM12"]
+        self.p = 35.0
+        self.d = 10.0
+        self.f = 0.0
 
         #read config File
         self.config = json.load(open("platform.config"))
@@ -27,11 +33,18 @@ class platformNode():
         connect_processes = []
         unordered_controllers = []
         for i in range(0,len(self.usb_map)):
-            device = "/dev/ttyUSB" + str(i)
+            device = None
+            if platform.system() == "Windows":
+                device = self.COM_ports[i]
+            else:
+                device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
             ctrl = SPCS2_USB(device)
             ctrl.open() #blocking
             ctrl.set_command_source(0)
+            ctrl.set_proportional(int(self.p * 10))
+            ctrl.set_derivative(int(self.d * 10))
+            ctrl.set_force_damping(int(self.f * 10))
             serial_number = ctrl.serial_number
             if serial_number == -1:
                 print ctrl.port + " Failed to connect"
@@ -79,7 +92,7 @@ class platformNode():
             self.last_packet = time.time()
             self.sum += rate
             self.count += 1
-            if self.count == 10:
+            if self.count == 30:
                 print "{}: {} hz".format(msg_id,self.sum/self.count)
                 self.sum = 0.0
                 self.count = 0.0
@@ -92,7 +105,6 @@ class platformNode():
                 value_type = obj["value_type"]
                 values = obj["values"]
                 for i in range(0,len(values)):
-                    #continue
                     if self.controllers[i] is None:
                         print "uninitialized controller"
                         continue
@@ -122,7 +134,6 @@ class platformNode():
 
             #send sensor feedback
             if self.stream_rate.value > 0 and self.stream_mode.value != 0:
-                print " we are streaming"
                 stream_period =  1.0/self.stream_rate.value
                 time_diff = time.time() - last_feedback_time
                 if time_diff > stream_period:
@@ -138,20 +149,20 @@ class platformNode():
                             #request data
                             ctrl.request_position()
                             ctrl.request_pressure()
-                            time.sleep(stream_period/2.0)
+                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                             pressure.append(ctrl.pressure)
                         if self.stream_mode.value == 2:
                             #request data
                             ctrl.request_position()
-                            time.sleep(stream_period/2.0)
+                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                         if self.stream_mode.value == 3:
                             #request data
                             ctrl.request_pressure()
-                            time.sleep(stream_period/2.0)
+                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             pressure.append(ctrl.pressure)
                     #pack data
@@ -177,9 +188,9 @@ class platformNode():
     def run(self):
         try:
             #start streaming feedback in the background
-            stream_process =  Process(target=self.stream_feedback)
+            self.stream_process = Thread(target=self.stream_feedback)
             #stream_process.daemon = True
-            stream_process.start()
+            self.stream_process.start()
             #process incoming commands
             while self.running:
                 self.receive_command()
@@ -188,16 +199,24 @@ class platformNode():
             self.close()
 
     def close(self):
-        #stop process
-        self.running = False
-        self.stream_process.join()
+        try:
+            #stop process
+            self.running = False
+            self.stream_process.join()
+        except:
+            pass
 
-        #close server
-        self.sock.close()
-        #close controllers
-        for ctrl in self.controllers:
-            if ctrl is not None:
-                ctrl.close()
+        try:
+            #close server
+            self.sock.close()
+            #close controllers
+            for ctrl in self.controllers:
+                if ctrl is not None:
+                    ctrl.close()
+        except:
+            pass
+
+
 
 
 if __name__ == "__main__":

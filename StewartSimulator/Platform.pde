@@ -24,8 +24,8 @@ class Platform {
   private final float scale = 1.0;
 
   private Client client;
-  private int stream_mode = 0;
-  private int stream_rate = 1;
+  private int stream_mode = 1;
+  private int stream_rate = 10;
 
   public Platform(PVector origin, PVector attitude) {
 

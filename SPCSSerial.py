@@ -114,15 +114,6 @@ class SPCS2_USB():
         return [self._pressure[0],self._pressure[1]]
 
     def open(self,wait_serial_number = True):
-        #connect to serial port
-        self.ser = serial.Serial(port = self.port,
-                                baudrate = 115200,
-                                timeout = 0.5)
-        #clear I/O buffers
-        self.ser.flushInput()
-        self.ser.flushOutput()
-        #TODO reallign data
-        time.sleep(0.3)
 
         #start incoming data process
         self.running = True
@@ -248,7 +239,8 @@ class SPCS2_USB():
 
         #create command and queue it up
         command = self.pack_command(1,value)
-        self.outgoing.put(("set_proportional",command))
+        self.outgoing.put(command)
+        self.incoming.put("set_proportional")
 
     # set_derivative - set the derivative gain 0-100% (0 - 1000)
     def set_derivative(self,value):
@@ -258,7 +250,8 @@ class SPCS2_USB():
 
         #create command and queue it up
         command = self.pack_command(2,value)
-        self.outgoing.put(("set_derivative",command))
+        self.outgoing.put(command)
+        self.incoming.put("set_derivative")
 
     # set_force_damping - set the force damping constant (0 - 1000)
     def set_force_damping(self,value):
@@ -268,7 +261,8 @@ class SPCS2_USB():
 
         #create command and queue it up
         command = self.pack_command(8,value)
-        self.outgoing.put(("set_force_damping",command))
+        self.outgoing.put(command)
+        self.incoming.put("set_force_damping")
 
     # set_offset- set the position offset (-1000 - 1000)
     def set_offset(self,value):
@@ -278,7 +272,8 @@ class SPCS2_USB():
 
         #create command and queue it up
         command = self.pack_command(15,value)
-        self.outgoing.put(("set_offset",command))
+        self.outgoing.put(command)
+        self.incoming.put("set_offset")
 
     # request_position- get the position feedback of controller (returns 0 - 4095)
     def request_position(self):
@@ -297,7 +292,7 @@ class SPCS2_USB():
         #create request and queue it up
         command = self.pack_command(155,4369)
         self.outgoing.put(command)
-        self.incoming.put("pressure1_req")
+        self.incoming.put("pressure2_req")
 
 
     # request_serial_number - get controller serial number
@@ -308,6 +303,16 @@ class SPCS2_USB():
         self.incoming.put("serial_number_req")
 
     def process_IO(self):
+
+        self.ser = serial.Serial(port = self.port,
+                                baudrate = 115200,
+                                timeout = 0.5)
+        #clear I/O buffers
+        self.ser.flushInput()
+        self.ser.flushOutput()
+        time.sleep(0.3)
+
+
         temp_pressure1 = None
         last_write = 0
         write_period = 1/500.0

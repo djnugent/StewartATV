@@ -25,8 +25,8 @@ PVector whl_1_attitude = new PVector(PI,platform_angle - PI,0);
 PVector whl_2_attitude = new PVector(0,-platform_angle,0);
 PVector whl_3_attitude = new PVector(0,-platform_angle,0);
 
-int step;
-float speed = 100;
+float angle;
+float speed = 0.0;
 float radius = .1;
 
 
@@ -83,6 +83,9 @@ void setup() {
   cp5.addSlider("posZ")
     .setPosition(20, 120)
     .setSize(180, 40).setRange(-1, 1);
+  cp5.addSlider("speed")
+    .setPosition(width-200, 170)
+    .setSize(180, 40).setRange(0, 1);
   cp5.addSlider("rotX")
     .setPosition(width-200, 20)
     .setSize(180, 40).setRange(-1, 1);
@@ -105,22 +108,24 @@ void draw() {
   //println(1000.0/(millis() - last));
   last = millis();
   background(200);
-  /*
-  posX = 0.3;
-  posY = radius * cos(step * 1.0 / speed);
-  posZ = radius * sin(step * 1.0/ speed) + 0.2;
-  step++;
-  */
+  float x,y,z;
+  radius = posY/10.0;
+  angle = angle + speed/20.0;
+  x = posX;
+  y =  radius * cos(angle);
+  z = radius * sin(angle) + posZ;
+  
+  
   
   
   int i = 0;
   for (Platform platform: platforms){
     if(i < 2){
-    platform.transform(PVector.mult(new PVector(posX, posY, posZ), 50), 
+    platform.transform(PVector.mult(new PVector(x, y, z), 50), 
       PVector.mult(new PVector(rotX, rotY, rotZ), PI/2));
     }
     else{
-      platform.transform(PVector.mult(new PVector(-posX, posY, posZ), 50), 
+      platform.transform(PVector.mult(new PVector(-x, y, z), 50), 
       PVector.mult(new PVector(rotX, -rotY, rotZ), PI/2));
     }
     platform.draw();
