@@ -319,10 +319,10 @@ class SPCS2_USB():
         while self.running:
             if self.outgoing.qsize() > 20:
                 print "WARNING: WRITING too fast, queued packets = {} ".format(self.outgoing.qsize())
-                time.sleep(0.1)
+                time.sleep(0.5)
             elif self.incoming.qsize() > 20:
                 print "WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.incoming.qsize(),self.ser.inWaiting())
-                time.sleep(0.1)
+                time.sleep(0.5)
             try:
                 #send next available outgoing message
                 if time.time() - last_write > write_period:
@@ -370,7 +370,7 @@ class SPCS2_USB():
                     if self.misc_callback is not None:
                         self.misc_callback(data)
             else:
-                time.sleep(0.005)
+                time.sleep(0.01)
 
 
 
