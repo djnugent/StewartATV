@@ -52,7 +52,7 @@ class Server implements Runnable {
         if (onClientConnectCallback != null) {
           onClientConnectCallback.execute(new_client);
         }        
-        
+        delay(250);
       }
     }
     catch(SocketException e) {
@@ -107,6 +107,9 @@ class Client implements Runnable {
         } else if (onDataReceivedCallback != null) {
           onDataReceivedCallback.execute(obj);
         }
+      }
+      else{
+        delay(1);
       }
     }
   }

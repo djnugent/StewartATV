@@ -29,7 +29,7 @@ class platformNode():
         for i in range(0,len(self.usb_map)):
             device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
-            ctrl = SPCS2_USB(device)
+            ctrl = SPCS2_USB(device,i)
             ctrl.open() #blocking
             ctrl.set_command_source(0)
             serial_number = ctrl.serial_number
@@ -40,6 +40,7 @@ class platformNode():
                 self.controllers[self.usb_map[str(serial_number)]] = ctrl
 
     def connect_to_server(self, TCP_ip, TCP_port = 9876, timeout = 30):
+        print "Connecting to server {}:{}".format(TCP_ip,TCP_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print "Waiting for server to accept connection..."
         start = time.time()
@@ -203,7 +204,7 @@ class platformNode():
 if __name__ == "__main__":
     node = platformNode()
     node.connect_to_platform()
-    connected = node.connect_to_server("172.16.68.106")
-    #connected = node.connect_to_server("192.168.1.14")
+    #connected = node.connect_to_server("172.16.68.106")
+    connected = node.connect_to_server("192.168.1.2")
     if connected:
         node.run()

@@ -80,7 +80,8 @@ set_pos = 100; pres = 50
 
 class SPCS2_USB():
 
-    def __init__(self,port):
+    def __init__(self,port,ID):
+        self.ID = ID
         #serial config
         self.ser = None
         self.port = port
@@ -308,14 +309,15 @@ class SPCS2_USB():
     def process_IO(self):
         temp_pressure1 = None
         last_write = 0
-        write_period = 1/500.0
+        last_warning = 0
+        write_period = 1/100.0
         while self.running:
-            if self.outgoing.qsize() > 20:
-                print "WARNING: WRITING too fast, queued packets = {} ".format(self.outgoing.qsize())
-                time.sleep(0.1)
-            elif self.incoming.qsize() > 20:
-                print "WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.incoming.qsize(),self.ser.inWaiting())
-                time.sleep(0.1)
+            if self.outgoing.qsize() > 20 and time.time() - last_warning > 0.5:
+                print "{}: WARNING: WRITING too fast, queued packets = {} ".format(self.ID,self.outgoing.qsize())
+                last_warning = time.time()
+            elif self.incoming.qsize() > 20 and time.time() - last_warning > 0.5:
+                print "{}: WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.ID,self.incoming.qsize(),self.ser.inWaiting())
+                last_warning = time.time()
             try:
                 #send next available outgoing message
                 if time.time() - last_write > write_period:
@@ -363,7 +365,7 @@ class SPCS2_USB():
                     if self.misc_callback is not None:
                         self.misc_callback(data)
             else:
-                time.sleep(0.005)
+                time.sleep(0.001)
 
 
 
