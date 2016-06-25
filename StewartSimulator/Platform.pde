@@ -24,8 +24,8 @@ class Platform {
   private final float scale = 1.0;
 
   private Client client;
-  private int stream_mode = 0;
-  private int stream_rate = 2;
+  private int stream_mode = 1;
+  private int stream_rate = 5;
 
   public Platform(PVector origin, PVector attitude) {
 
@@ -136,7 +136,7 @@ class Platform {
 
   public void callback(Object... args){
     JSONObject json = (JSONObject)args[0];
-    println(json);
+    println(json.toString().replaceAll("\\s",""));
   }
   
   public float[] get_length() {

@@ -20,7 +20,7 @@ class platformNode():
         self.count = 0.0
         self.COM_ports = ["COM5","COM8","COM9","COM10","COM11","COM12"]
         self.p = 35.0
-        self.d = 10.0
+        self.d = 0.0
         self.f = 0.0
 
         #read config File
@@ -39,7 +39,7 @@ class platformNode():
             else:
                 device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
-            ctrl = SPCS2_USB(device)
+            ctrl = SPCS2_USB(device,i)
             ctrl.open() #blocking
             ctrl.set_command_source(0)
             ctrl.set_proportional(int(self.p * 10))
@@ -150,20 +150,17 @@ class platformNode():
                             #request data
                             ctrl.request_position()
                             ctrl.request_pressure()
-                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                             pressure.append(ctrl.pressure)
                         if self.stream_mode.value == 2:
                             #request data
                             ctrl.request_position()
-                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             position.append(ctrl.position)
                         if self.stream_mode.value == 3:
                             #request data
                             ctrl.request_pressure()
-                            time.sleep(stream_period/3.0)
                             #grab data - wont always arrive in time so it may be old
                             pressure.append(ctrl.pressure)
                     #pack data
@@ -200,22 +197,26 @@ class platformNode():
             self.close()
 
     def close(self):
+        #stop streaming
         try:
-            #stop process
             self.running = False
             self.stream_process.join()
         except:
-            pass
+            print "ERROR joining stream_process"
 
+        #close socket connection
         try:
-            #close server
             self.sock.close()
-            #close controllers
-            for ctrl in self.controllers:
-                if ctrl is not None:
-                    ctrl.close()
         except:
-            pass
+            print "ERROR closing socket"
+
+        #close serial drivers
+        for ctrl in self.controllers:
+            if ctrl is not None:
+                try:
+                    ctrl.close()
+                except:
+                    print "ERROR closing controller {}".format(ctrl.ID)
 
 
 
@@ -223,7 +224,6 @@ class platformNode():
 if __name__ == "__main__":
     node = platformNode()
     node.connect_to_platform()
-    #connected = node.connect_to_server("172.16.68.106")
-    connected = node.connect_to_server("192.168.1.2")
+    connected = node.connect_to_server("192.168.1.3")
     if connected:
         node.run()

@@ -80,7 +80,8 @@ set_pos = 100; pres = 50
 
 class SPCS2_USB():
 
-    def __init__(self,port):
+    def __init__(self,port,ID):
+        self.ID = ID
         #serial config
         self.ser = None
         self.port = port
@@ -315,21 +316,23 @@ class SPCS2_USB():
 
         temp_pressure1 = None
         last_write = 0
-        write_period = 1/500.0
+        write_period = 1/1000.0
+        last_warning = 0
+        warning_period = 0.5
         while self.running:
-            if self.outgoing.qsize() > 20:
-                print "WARNING: WRITING too fast, queued packets = {} ".format(self.outgoing.qsize())
-                time.sleep(0.5)
-            elif self.incoming.qsize() > 20:
-                print "WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.incoming.qsize(),self.ser.inWaiting())
-                time.sleep(0.5)
+            if self.outgoing.qsize() > 20 and time.time() - last_warning > warning_period:
+                print "{}: WARNING: WRITING too fast, queued packets = {} ".format(self.ID,self.outgoing.qsize())
+                last_warning = time.time()
+            elif self.incoming.qsize() > 20 and time.time() - last_warning > warning_period:
+                print "{}: WARNING: READING to slow, queued packets = {} bytes available = {}".format(self.ID,self.incoming.qsize(),self.ser.inWaiting())
+                last_warning = time.time()
             try:
                 #send next available outgoing message
                 if time.time() - last_write > write_period:
                     packet = self.outgoing.get(block = False)
                     self.ser.write(packet)
                     last_write = time.time()
-                    #print self.outgoing.qsize()
+                    self.ser.flush()
             except Empty:
                 pass
 
@@ -339,7 +342,6 @@ class SPCS2_USB():
                 raw = self.ser.read(6)
                 data = self.unpack_response(raw)
                 typ = self.incoming.get()
-                #print self.incoming.qsize()
 
                 #serial number response
                 if typ == "serial_number_req":
@@ -370,7 +372,7 @@ class SPCS2_USB():
                     if self.misc_callback is not None:
                         self.misc_callback(data)
             else:
-                time.sleep(0.01)
+                time.sleep(0.001)
 
 
 
@@ -390,12 +392,13 @@ if __name__ == "__main__":
 
         #set position
         if program == 1:
-            print "here"
             controller.set_command_source(0)
             print("Enabled USB control")
             while True:
                 value = int(raw_input(">>Please enter a piston position(0-4095): "))
                 controller.set_position(value)
+                controller.request_position()
+                controller.request_pressure()
                 time.sleep(0.25) #wait for piston to move
                 position = controller.position
                 pressure = [None,None]#controller.pressure

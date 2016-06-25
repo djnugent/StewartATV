@@ -6,7 +6,7 @@ class Server implements Runnable {
   private Thread t;
   private ServerSocket serverSocket;
   private int port;
-  private ArrayList<Client> clients;
+  public ArrayList<Client> clients;
   private Callback onClientConnectCallback;
 
 
@@ -44,15 +44,14 @@ class Server implements Runnable {
     try {
       while (true) {
         //accept new clients
-        Client new_client = new Client(serverSocket.accept());
+        Client new_client = new Client(serverSocket.accept(),this);
         new_client.start();
         clients.add(new_client);
 
         //run onClientConnectCallback
         if (onClientConnectCallback != null) {
           onClientConnectCallback.execute(new_client);
-        }        
-        
+        }
       }
     }
     catch(SocketException e) {
@@ -76,15 +75,19 @@ class Server implements Runnable {
 class Client implements Runnable {
   private Thread t;
   private Socket clientSocket;
+  private Server server;
   private PrintWriter out;
   private BufferedReader in; 
   private Callback onDataReceivedCallback;
   private double last_heartbeat = 0;
   private boolean running = false;
   public int id = -1;
+  public boolean error = false;
 
-  public Client(Socket clientSocket) {
+
+  public Client(Socket clientSocket, Server server) {
     this.clientSocket = clientSocket;
+    this.server = server;
 
     try {
       this.clientSocket.setTcpNoDelay(true);
@@ -99,14 +102,28 @@ class Client implements Runnable {
 
   public void run() {
     while (running) {
-      JSONObject obj = readJSON();
-      if (obj.size() > 0) {
-        if (obj.getString("msg_id").equals("heartbeat")) {
-          id = obj.getInt("id");
-          last_heartbeat = System.currentTimeMillis()/1000.0;
-        } else if (onDataReceivedCallback != null) {
-          onDataReceivedCallback.execute(obj);
+      try{
+        //try to recv data
+        JSONObject obj = readJSON();
+        if (obj.size() > 0) {
+          if (obj.getString("msg_id").equals("heartbeat")) {
+            id = obj.getInt("id");
+            last_heartbeat = millis()/1000.0;
+          } else if (onDataReceivedCallback != null) {
+            onDataReceivedCallback.execute(obj);
+          }
         }
+        //no data available
+        else{
+          if(!is_alive()){
+            println("client has disconnected");
+            stop();
+            server.clients.remove(this);
+          }
+        }
+      }
+      catch(IOException e) {
+            error = true;
       }
     }
   }
@@ -124,17 +141,13 @@ class Client implements Runnable {
     running = false;
   }
 
-  public JSONObject readJSON() {
-    String line = null;
-    try {
-        line = in.readLine();
-    }
-    catch(IOException e) {
-      println("Error reading TCP packet");
-    }
+  public JSONObject readJSON() throws IOException { 
     JSONObject obj = new JSONObject();
-    if (line != null && line.length() > 0) {
-      obj = parseJSONObject(line);
+    if(in.ready()){  
+      String line = in.readLine();
+      if (line != null && line.length() > 0) {
+        obj = parseJSONObject(line);
+      }
     }
     return obj;
   }
@@ -145,8 +158,8 @@ class Client implements Runnable {
     out.flush();
   }
 
-  public boolean connected() {
-    return (System.currentTimeMillis()/1000.0 - last_heartbeat < 2);
+  public boolean is_alive() {
+    return !error && (millis()/1000.0 - last_heartbeat < 2) && running;
   }
 
   public void set_onDataReceivedCallback(Callback callback) {
