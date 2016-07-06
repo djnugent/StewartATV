@@ -7,7 +7,7 @@ ControlP5 cp5;
 PeasyCam camera;
 int camera_angle;
 boolean ctlPressed = false;
-float posX=0, posY=0, posZ=0, rotX=0, rotY=0, rotZ=0;
+float posX=0, posY=0, posZ=0, rotX=0, rotY=0, rotZ=0, speed = 0;
 
 //Platform variables
 ArrayList<Platform> platforms = new ArrayList<Platform>();
@@ -25,10 +25,11 @@ PVector whl_1_attitude = new PVector(PI,platform_angle - PI,0);
 PVector whl_2_attitude = new PVector(0,-platform_angle,0);
 PVector whl_3_attitude = new PVector(0,-platform_angle,0);
 
-float angle;
-float speed = 0.0;
-float radius = .1;
 
+AnimationManager animation_manager = new AnimationManager(new PVector(0,0,0));
+CircleAnimation circle_animation = new CircleAnimation(15);
+ManualAnimation manual_animation = new ManualAnimation();
+WalkAnimation walk_animation = new WalkAnimation(8);
 
 //network Variables and   callbacks
 Server server;
@@ -101,39 +102,44 @@ void setup() {
   
   
   
+  //animations  
+  //animation_manager.set_animation(manual_animation);
+  //animation_manager.set_animation(circle_animation);
+  animation_manager.set_animation(walk_animation);
 }
 
-int last = 0;
 void draw() {
-  //println(1000.0/(millis() - last));
-  last = millis();
   background(200);
-  float x,y,z;
-  radius = posY/10.0;
-  angle = angle + speed/20.0;
-  x = posX;
-  y =  radius * cos(angle);
-  z = radius * sin(angle) + posZ;
   
   
+  
+  manual_animation.config(PVector.mult(new PVector(posX, posY, posZ), 50));
+  circle_animation.config(10,PVector.mult(new PVector(posX, posY, posZ), 50));
+  walk_animation.config(-3,18,10);
+  float time = 20 - speed*15;
+  animation_manager.set_animation_time(time);
+  if(speed == 0){
+   animation_manager.pause(); 
+  }
+  else{
+    animation_manager.play();
+  }
+  PVector position = animation_manager.run();
   
   
   int i = 0;
   for (Platform platform: platforms){
     if(i < 2){
-    platform.transform(PVector.mult(new PVector(x, y, z), 50), 
-      PVector.mult(new PVector(rotX, rotY, rotZ), PI/2));
+    platform.transform(position, PVector.mult(new PVector(rotX, rotY, rotZ), PI/2));
     }
     else{
-      platform.transform(PVector.mult(new PVector(-x, y, z), 50), 
-      PVector.mult(new PVector(rotX, -rotY, rotZ), PI/2));
+      PVector position_refl = new PVector(position.x * -1,position.y,position.z);
+      platform.transform(position_refl, PVector.mult(new PVector(rotX, -rotY, rotZ), PI/2));
     }
     platform.draw();
     platform.send_position();
     i++;
-  }
- //println(platforms.get(0).scaled_positions);
-  
+  }  
  
   
   hint(DISABLE_DEPTH_TEST);
