@@ -12,6 +12,7 @@ class platformNode():
         self.sock = None
         self.controllers = [None,None,None,None,None,None]
         self.running = True
+        self.connected = False
         self.stream_rate = Value('i',0)
         self.stream_mode = Value('i',0)
         self.inbuffer = ''
@@ -40,7 +41,7 @@ class platformNode():
                 device = "/dev/ttyUSB" + str(i)
             print "Connecting to " + device
             ctrl = SPCS2_USB(device,i)
-            ctrl.open() #blocking
+            ctrl.open(timeout = 0) #blocking
             ctrl.set_command_source(0)
             ctrl.set_proportional(int(self.p * 10))
             ctrl.set_derivative(int(self.d * 10))
@@ -52,31 +53,40 @@ class platformNode():
             else:
                 self.controllers[self.usb_map[str(serial_number)]] = ctrl
 
-    def connect_to_server(self, TCP_ip, TCP_port = 9876, timeout = 30):
-        print "Connecting to server {}:{}".format(TCP_ip,TCP_port)
+    def connect_to_server(self, TCP_ip="127.0.0.1", TCP_port = 9876, timeout = 30,reconnect = False):
+        if reconnect == False:
+            self.TCP_ip = TCP_ip
+            self.TCP_port = TCP_port
+        print "Connecting to server {}:{}".format(self.TCP_ip,self.TCP_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print "Waiting for server to accept connection..."
         start = time.time()
         connected = False
         #attempt to connect to server
-        while not connected and time.time() - start < timeout:
+        while not connected and (time.time() - start < timeout or timeout == 0):
             connected = True
             try:
-                self.sock.connect((TCP_ip, TCP_port))
+                self.sock.connect((self.TCP_ip, self.TCP_port))
             except socket.error:
                 connected = False
                 time.sleep(1)
         #failed to connect
         if not connected:
             print "Server connection timed out"
+            self.connected = False
             return False
 
-        print "Connected to server " + str(TCP_ip) + ':' + str(TCP_port)
+        print "Connected to server " + str(self.TCP_ip) + ':' + str(self.TCP_port)
+        self.connected = True
         self.send_heartbeat()
         return True
 
     def receive_command(self):
-        self.inbuffer += self.sock.recv(4096)
+        try:
+            self.inbuffer += self.sock.recv(4096)
+        except socket.error:
+            self.connected = False
+            print "Connection closed by server"
 
         complete_lines = self.inbuffer.count('\n')
         lines = self.inbuffer.split('\n')
@@ -122,65 +132,98 @@ class platformNode():
                         self.controllers[i].set_force_damping(value)
                     else:
                         print "invalid value_type"
+            elif msg_id == "safe_move":
+                values = obj["values"]
+                max_step = obj["max_step"]
+                threshold = 100
+                moving = True
+                while moving:
+                    moving = False
+                    for value, ctrl in values,self.controllers:
+                        current_pos = ctrl.position
+                        if current_pos != -1:
+                            diff = value - current_pos
+                            #constrain movement
+                            if abs(diff) > threshold:
+                                moving = True
+                                movement = min(max(diff,-max_step),max_step)
+                                ctrl.set_position(current_pos + movement)
+                                ctrl.request_position()
+                    time.sleep(1/60.0)
+
+
             else:
                 print "invalid command type"
+            #send ack
+            packet = json.dumps({"msg_id":"ack","id":self.id,"type":msg_id, "response":"accepted"}) + '\n'
+            self.send_packet(packet)
 
 
     def stream_feedback(self):
         last_feedback_time = time.time()
         while self.running:
-            #send heartbeat
-            if time.time() - self.last_heartbeat_time > 1:
-                self.send_heartbeat()
+            if self.connected:
+                #send heartbeat
+                if time.time() - self.last_heartbeat_time > 1:
+                    self.send_heartbeat()
 
-            #send sensor feedback
-            if self.stream_rate.value > 0 and self.stream_mode.value != 0:
-                stream_period =  1.0/self.stream_rate.value
-                time_diff = time.time() - last_feedback_time
-                if time_diff > stream_period:
-                    #update timestamp
-                    last_feedback_time = time.time()
-                    #poll data
-                    position = []
-                    pressure = []
-                    for ctrl in self.controllers:
-                        if ctrl is None:
-                            continue
-                        if self.stream_mode.value == 1:
-                            #request data
-                            ctrl.request_position()
-                            ctrl.request_pressure()
-                            #grab data - wont always arrive in time so it may be old
-                            position.append(ctrl.position)
-                            pressure.append(ctrl.pressure)
-                        if self.stream_mode.value == 2:
-                            #request data
-                            ctrl.request_position()
-                            #grab data - wont always arrive in time so it may be old
-                            position.append(ctrl.position)
-                        if self.stream_mode.value == 3:
-                            #request data
-                            ctrl.request_pressure()
-                            #grab data - wont always arrive in time so it may be old
-                            pressure.append(ctrl.pressure)
-                    #pack data
-                    stream = {}
-                    stream["msg_id"] = "stream"
-                    stream["position"] = position
-                    stream["pressure"] = pressure
-                    packet = json.dumps(stream) + '\n'
+                #send sensor feedback
+                if self.stream_rate.value > 0 and self.stream_mode.value != 0:
+                    stream_period =  1.0/self.stream_rate.value
+                    time_diff = time.time() - last_feedback_time
+                    if time_diff > stream_period:
+                        #update timestamp
+                        last_feedback_time = time.time()
+                        #poll data
+                        position = []
+                        pressure = []
+                        for ctrl in self.controllers:
+                            if ctrl is None:
+                                continue
+                            if self.stream_mode.value == 1:
+                                #request data
+                                ctrl.request_position()
+                                ctrl.request_pressure()
+                                #grab data - wont always arrive in time so it may be old
+                                position.append(ctrl.position)
+                                pressure.append(ctrl.pressure)
+                            if self.stream_mode.value == 2:
+                                #request data
+                                ctrl.request_position()
+                                #grab data - wont always arrive in time so it may be old
+                                position.append(ctrl.position)
+                            if self.stream_mode.value == 3:
+                                #request data
+                                ctrl.request_pressure()
+                                #grab data - wont always arrive in time so it may be old
+                                pressure.append(ctrl.pressure)
+                        #pack data
+                        stream = {}
+                        stream["msg_id"] = "stream"
+                        stream["id"] = self.id
+                        stream["position"] = position
+                        stream["pressure"] = pressure
+                        packet = json.dumps(stream) + '\n'
 
-                    #send data
-                    self.sock.send(packet)
+                        #send data
+                        self.send_packet(packet)
+                    else:
+                        time.sleep(stream_period/4.0)
                 else:
-                    time.sleep(stream_period/4.0)
-            else:
-                time.sleep(0.25)
+                    time.sleep(0.25)
 
     def send_heartbeat(self):
         packet = json.dumps({"msg_id":"heartbeat","id":self.id,"timestamp":time.time()}) + '\n'
-        self.sock.send(packet)
+        self.send_packet(packet)
         self.last_heartbeat_time = time.time()
+
+    def send_packet(self,packet):
+        try:
+            self.sock.send(packet)
+        except socket.error:
+            self.connected = False
+            print "Connection closed by server"
+
 
 
     def run(self):
@@ -191,8 +234,11 @@ class platformNode():
             self.stream_process.start()
             #process incoming commands
             while self.running:
-                self.receive_command()
-                time.sleep(0.005)
+                if self.connected:
+                    self.receive_command()
+                    time.sleep(0.005)
+                else:
+                    self.connect_to_server(reconnect = True,timeout=0)
         finally:
             self.close()
 
@@ -224,6 +270,6 @@ class platformNode():
 if __name__ == "__main__":
     node = platformNode()
     node.connect_to_platform()
-    connected = node.connect_to_server("192.168.1.3")
+    connected = node.connect_to_server("127.0.0.1",timeout=0)
     if connected:
         node.run()

@@ -114,7 +114,7 @@ class SPCS2_USB():
     def pressure(self):
         return [self._pressure[0],self._pressure[1]]
 
-    def open(self,wait_serial_number = True):
+    def open(self,timeout = 2):
 
         #start incoming data process
         self.running = True
@@ -124,10 +124,9 @@ class SPCS2_USB():
 
         #request serial_number
         self.request_serial_number()
-        WAIT_TIMEOUT = 2
-        if wait_serial_number:
+        if timeout > 0:
             start = time.time()
-            while self._serial_number.value == -1 and (time.time()-start) < WAIT_TIMEOUT:
+            while self._serial_number.value == -1 and (time.time()-start) < timeout:
                 time.sleep(0.1)
 
     def close(self):
@@ -304,10 +303,12 @@ class SPCS2_USB():
         self.incoming.put("serial_number_req")
 
     def process_IO(self):
-
-        self.ser = serial.Serial(port = self.port,
-                                baudrate = 115200,
-                                timeout = 0.5)
+        try:
+            self.ser = serial.Serial(port = self.port,
+                                    baudrate = 115200,
+                                    timeout = 0.5)
+        except OSError:
+            return
         #clear I/O buffers
         self.ser.flushInput()
         self.ser.flushOutput()
