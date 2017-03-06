@@ -4,7 +4,7 @@
 
  It is controlled using 4 raspberry pi clients and PC server.
  
- ![Platform](https://raw.githubusercontent.com/djnugent/stewartatv/master/git-res/jamie.jpg)
+ ![Platform](https://github.com/djnugent/StewartATV/blob/master/IMG_20160729_175457422.jpg)
  
 ###Dependencies:  
 - [peasycam](http://mrfeinberg.com/peasycam/)  
